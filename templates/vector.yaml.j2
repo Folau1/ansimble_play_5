@@ -1,0 +1,13 @@
+sources:
+  dummy_logs:
+    type: demo_logs
+    format: syslog
+    interval: 1
+
+sinks:
+  console:
+    type: console
+    inputs:
+      - dummy_logs
+    encoding:
+      codec: json

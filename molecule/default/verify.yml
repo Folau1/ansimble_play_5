@@ -1,0 +1,44 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Check Vector binary
+      ansible.builtin.stat:
+        path: /usr/bin/vector
+      register: vector_binary
+
+    - name: Assert Vector binary exists
+      ansible.builtin.assert:
+        that:
+          - vector_binary.stat.exists
+        fail_msg: "Vector binary was not found"
+        success_msg: "Vector binary exists"
+
+    - name: Validate Vector config
+      ansible.builtin.command:
+        cmd: /usr/bin/vector validate /etc/vector/vector.yaml
+      register: vector_config_validation
+      changed_when: false
+
+    - name: Assert Vector config is valid
+      ansible.builtin.assert:
+        that:
+          - vector_config_validation.rc == 0
+        fail_msg: "Vector configuration is invalid"
+        success_msg: "Vector configuration is valid"
+
+    - name: Check Vector service
+      ansible.builtin.command:
+        cmd: systemctl is-active vector
+      register: vector_service
+      changed_when: false
+
+    - name: Assert Vector service is running
+      ansible.builtin.assert:
+        that:
+          - vector_service.stdout == "active"
+        fail_msg: "Vector service is not running"
+        success_msg: "Vector service is active"

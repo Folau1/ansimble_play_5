@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: vector
+  namespace: folau1
+  author: Folau1
+  description: Install and configure Vector
+  license: MIT
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Ubuntu
+    - name: EL
+      versions:
+        - "8"
+
+  galaxy_tags:
+    - vector
+    - logging
+
+dependencies: []
