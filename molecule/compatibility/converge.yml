@@ -1,0 +1,8 @@
+---
+- name: Converge
+  hosts: all
+
+  tasks:
+    - name: Apply Vector role
+      ansible.builtin.include_role:
+        name: folau1.vector

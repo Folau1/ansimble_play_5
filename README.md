@@ -354,6 +354,365 @@ default : actions=12 successful=7 disabled=0 skipped=0 missing=6 failed=0
 ```
 Таким образом, полный цикл Molecule успешно прошёл для ubuntu и oracle роль Vector корректно устанавливается, является идемпотентной, конфигурация валидна, а сервис успешно запускается.
 
+### 6. Добавляем тэг.
+
+Сначала, всё закомитим и запушим.
+
+```
+git status
+fatal: not a git repository (or any of the parent directories): .git
+```
+
+Да пока ничего нет, всё добавляем и делаем первый коммит:
+Делаем git add и git commit.
+
+```
+git log --oneline -3
+5fc1d8f (HEAD -> main) Первый коммит
+```
+
+
+Поставить семантический тег:
+```
+git tag v1.0.0
+```
+
+## TOX
+
+### 1. Добавляем файлы для Tox.
+
+По заданию нужно добавить в корень роли Vector файлы tox.ini и requirements.txt из example.
+Файл tox.ini:
+
+```
+[tox]
+minversion = 1.8
+basepython = python3.6
+envlist = py{37,39}-ansible{210,30}
+skipsdist = true
+
+[testenv]
+passenv = *
+deps =
+    -r tox-requirements.txt
+    ansible210: ansible<3.0
+    ansible30: ansible<3.1
+commands =
+    {posargs:molecule test -s compatibility --destroy always}
+```
+
+
+Файл `tox-requirements.txt`:
+
+```
+selinux
+lxml
+molecule
+molecule_podman
+jmespath
+```
+
+Проверяем содержимое файлов:
+
+```
+cat tox.ini
+cat tox-requirements.txt
+```
+
+Из tox.ini видно, что Tox должен запускать тестирование в нескольких окружениях Python и Ansible, а для проверки использовать сценарий из molecule.
+
+Далее скачиваем подготовленный учебный Docker-образ:
+
+```
+export DOCKER_CONFIG="$HOME/.docker-molecule"
+docker pull aragast/netology:latest
+```
+
+Образ успешно скачан:
+
+```
+Digest: sha256:e44f93d3d9880123ac8170d01bd38ea1cd6c5174832b1782ce8f97f13e695ad5
+Status: Downloaded newer image for aragast/netology:latest
+docker.io/aragast/netology:latest
+```
+
+При повторной проверке Docker сообщает, что образ уже актуален:
+
+```
+Status: Image is up to date for aragast/netology:latest
+```
+
+Таким образом, файлы для запуска Tox добавлены, docker образ готов.
+
+### 2. Запускаем подготовленный контейнер для Tox
+
+Запускаем docker контейнер и монтируем в него директорию с ролью.
+Команда запуска:
+
+```
+docker run --privileged=true   -v "/mnt/c/Users/Наталья/Documents/Project_home/ansible_play_5:/opt/vector-role"   -w /opt/vector-role   -it aragast/netology:latest /bin/bash
+```
+
+После запуска попадаем внутрь контейнера:
+
+```
+[root@93a91329436f vector-role]#
+```
+
+Проверяем текущую директорию:
+```
+pwd
+```
+
+Получаем:
+
+```
+/opt/vector-role
+```
+
+Проверяем содержимое директории:
+
+```
+ls -la
+```
+
+Внутри контейнера видим примонтированный проект:
+
+```
+.git
+README.md
+defaults
+handlers
+meta
+molecule
+tasks
+templates
+tests
+tox-requirements.txt
+tox.ini
+vars
+```
+
+Роль Vector примонтирована внутрь контейнера.
+Далее запускаем Tox:
+
+```
+tox
+```
+
+Tox начинает создавать первое тестовое окружение:
+
+```
+py37-ansible210 create: /opt/vector-role/.tox/py37-ansible210
+py37-ansible210 installdeps: -rtox-requirements.txt, ansible<3.0
+```
+
+Это означает, что Tox создаёт отдельное виртуальное окружение для Python и Ansible и устанавливает в него необходимые зависимости.
+
+После запуска будем сомтреть, появятся ошибки или нет и будем исправлять.
+
+### 3. Первый запуск Tox
+
+Внутри подготовленного контейнера запускаем Tox.
+Tox начал создавать первое тестовое окружение:
+
+```
+py37-ansible210 create: /opt/vector-role/.tox/py37-ansible210
+py37-ansible210 installdeps: -rtox-requirements.txt, ansible<3.0
+```
+
+Во время установки зависимостей процесс выполнялся слишком долго, поэтому был остановлен вручную сочетанием Ctrl+C.
+
+После остановки Tox вывел:
+
+```
+ERROR: got KeyboardInterrupt signal
+summary
+
+ERROR:   py37-ansible210: keyboardinterrupt
+ERROR:   py37-ansible30: undefined
+ERROR:   py39-ansible210: undefined
+ERROR:   py39-ansible30: undefined
+```
+
+На этом этапе видно, что Tox корректно прочитал tox.ini, начал создавать окружение и перешёл к установке зависимостей.
+
+Так как запуск был остановлен вручную, ошибки keyboardinterrupt и undefined не являются результатом проверки роли — это следствие незавершённого выполнения Tox.
+
+### 4. Облегчённый вариант Molecule
+
+Для проверки совместимости роли создаём отдельный сценарий compatibility с драйвером molecule_podman.
+
+Итоговый файл molecule/compatibility/molecule.yml:
+
+```
+dependency:
+  name: galaxy
+
+driver:
+  name: podman
+
+platforms:
+  - name: instance
+    image: quay.io/centos/centos:stream8
+    pre_build_image: true
+    privileged: true
+    command: /usr/sbin/init
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /tmp
+
+provisioner:
+  name: ansible
+
+verifier:
+  name: ansible
+
+Для запуска роли используется облегчённый molecule/compatibility/converge.yml:
+
+---
+- name: Converge
+  hosts: all
+
+  tasks:
+    - name: Apply Vector role
+      ansible.builtin.include_role:
+        name: folau1.vector
+
+```
+
+Проверяем сценарий:
+
+```
+molecule test -s compatibility
+```
+
+Сценарий успешно создал Podman-контейнер и применил роль Vector:
+
+```
+PLAY RECAP
+instance : ok=12 changed=11 unreachable=0 failed=0 skipped=0 rescued=0 ignored=0
+```
+
+Проверка идемпотентности также прошла успешно:
+
+```
+PLAY RECAP
+instance : ok=10 changed=0 unreachable=0 failed=0 skipped=1 rescued=0 ignored=0
+
+INFO     Idempotence completed successfully.
+```
+
+Этап verify завершился успешно:
+
+```
+TASK [Example assertion]
+ok: [instance] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+INFO     Verifier completed successfully.
+
+```
+После завершения тестирования Molecule успешно удалил созданный контейнер.
+
+Отсюда следует, что наш сценарий molecule с драйвером podman создан и проверен. Роль Vector также выполняется в тестовом окружении.
+
+### 5. Настройка запуска облегчённого сценария через Tox
+
+В tox.ini указываем запуск созданного облегчённого сценария compatibility:
+
+```
+commands =
+    {posargs:molecule test -s compatibility --destroy always}
+```
+
+Итоговый tox.ini:
+
+```
+[tox]
+minversion = 1.8
+basepython = python3.6
+envlist = py{37,39}-ansible{210,30}
+skipsdist = true
+
+[testenv]
+passenv = *
+deps =
+    -r tox-requirements.txt
+    ansible210: ansible<3.0
+    ansible30: ansible<3.1
+commands =
+    {posargs:molecule test -s compatibility --destroy always}
+```
+
+Таким образом, Tox будет запускать именно сценарий "molecule/compatibility".
+
+
+### 6. Запуск Tox
+
+Запускаем тестирование командой:
+
+```
+tox
+```
+
+Перед запуском проверил наличие необходимых версий Python:
+
+```
+Python 3.7.10
+Python 3.9.2
+```
+
+После запуска Tox начал создавать первое тестовое окружение:
+
+```
+py37-ansible210 create: /opt/vector-role/.tox/py37-ansible210
+py37-ansible210 installdeps: -rtox-requirements.txt, ansible<3.0
+py39-ansible30 create: /opt/vector-role/.tox/py39-ansible30
+py39-ansible30 installdeps: -rtox-requirements.txt, ansible<3.1
+```
+
+Установка зависимостей занимает продолжительное время.
+
+Проверка завершилась успешно: роль Vector применилась без ошибок, проверка идемпотентности завершилась с changed=0, а этап verify прошёл успешно.
+
+### 7. Добавление нового тега
+После всех операций, добавляем новый тэг.
+
+Предыдущая версия:
+
+```
+v1.0.0
+```
+
+Так как в проект добавлен новый функционал тестирования без нарушения обратной совместимости, используем новую minor-версию:
+
+```
+v1.1.0
+```
+
+Создаём тег:
+```
+git tag v1.1.0
+```
+
+Отправляем тег в удалённый репозиторий:
+```
+git push origin v1.1.0
+```
+Проверяем:
+```
+git tag
+```
+В списке тегов должны быть:
+```
+v1.0.0
+v1.1.0
+```
 
 
 
@@ -366,35 +725,3 @@ default : actions=12 successful=7 disabled=0 skipped=0 missing=6 failed=0
 
 
 
-
-# Vector Role
-
-Ansible role для установки и настройки Vector.
-
-Роль выполняет:
-
-- скачивание указанной версии Vector;
-- распаковку Vector в `/opt/vector`;
-- создание системного пользователя `vector`;
-- создание каталогов конфигурации и данных;
-- создание ссылки на бинарный файл Vector;
-- установку systemd unit;
-- разворачивание конфигурационного файла;
-- запуск и включение сервиса Vector.
-
-## Role Variables
-
-Версия Vector задаётся в `defaults/main.yml`:
-
-```yaml
-vector_version: "0.58.0"
-
-Версию Vector можно переопределить при использовании роли.
-
-Внутренние параметры роли находятся в `vars/main.yml`:
-
-```yaml
-vector_user: vector
-vector_install_dir: /opt/vector
-vector_config_dir: /etc/vector
-vector_data_dir: /var/lib/vector
